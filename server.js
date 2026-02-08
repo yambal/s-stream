@@ -25,6 +25,8 @@ function getStreamHeaders(req) {
   if (wantsMetadata) {
     headers['icy-metaint'] = String(ICY_METAINT);
   }
+  // デバッグ: メタデータリクエストの有無を確認用
+  headers['x-icy-debug'] = wantsMetadata ? 'metadata-requested' : 'no-metadata';
   return { headers, wantsMetadata };
 }
 
