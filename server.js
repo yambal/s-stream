@@ -12,22 +12,17 @@ const INTERVAL = Math.floor((CHUNK_SIZE / (BITRATE * 1000 / 8)) * 1000);
 const ICY_METAINT = 16000;
 
 function getStreamHeaders(req) {
-  const wantsMetadata = req && /icy-metadata:\s*1/i.test(req.headers['icy-metadata'] || '');
   const headers = {
     'Content-Type': 'audio/mpeg',
     'icy-name': 'ETS2 Radio',
     'icy-genre': 'Various',
     'icy-br': String(BITRATE),
     'icy-pub': '1',
+    'icy-metaint': String(ICY_METAINT),
     'Cache-Control': 'no-cache',
     'Connection': 'keep-alive',
   };
-  if (wantsMetadata) {
-    headers['icy-metaint'] = String(ICY_METAINT);
-  }
-  // デバッグ: メタデータリクエストの有無を確認用
-  headers['x-icy-debug'] = wantsMetadata ? 'metadata-requested' : 'no-metadata';
-  return { headers, wantsMetadata };
+  return { headers, wantsMetadata: true };
 }
 
 http.createServer((req, res) => {
