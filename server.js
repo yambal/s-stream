@@ -9,6 +9,18 @@ const BITRATE = 128;
 const CHUNK_SIZE = 4096;
 const INTERVAL = Math.floor((CHUNK_SIZE / (BITRATE * 1000 / 8)) * 1000);
 
+const STREAM_HEADERS = {
+  'Content-Type': 'audio/mpeg',
+  'icy-name': 'ETS2 Radio',
+  'icy-genre': 'Various',
+  'icy-br': String(BITRATE),
+  'icy-pub': '1',
+  'Cache-Control': 'no-cache, no-store',
+  'Pragma': 'no-cache',
+  'Connection': 'keep-alive',
+  'Accept-Ranges': 'none',
+};
+
 http.createServer((req, res) => {
   if (req.url === '/') {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
@@ -18,6 +30,12 @@ http.createServer((req, res) => {
   if (req.url !== '/stream') {
     res.writeHead(404);
     return res.end('Not found');
+  }
+
+  // HEAD リクエストにはヘッダーだけ返す
+  if (req.method === 'HEAD') {
+    res.writeHead(200, STREAM_HEADERS);
+    return res.end();
   }
 
   const files = fs.readdirSync(MP3_DIR).filter(f => f.endsWith('.mp3'));
@@ -30,17 +48,7 @@ http.createServer((req, res) => {
   console.log(`[${new Date().toISOString()}] Client connected: ${req.socket.remoteAddress}`);
   console.log(`Playlist: ${files.length} tracks`);
 
-  res.writeHead(200, {
-    'Content-Type': 'audio/mpeg',
-    'icy-name': 'ETS2 Radio',
-    'icy-genre': 'Various',
-    'icy-br': String(BITRATE),
-    'icy-pub': '1',
-    'Cache-Control': 'no-cache, no-store',
-    'Pragma': 'no-cache',
-    'Connection': 'keep-alive',
-    'Accept-Ranges': 'none',
-  });
+  res.writeHead(200, STREAM_HEADERS);
 
   let trackIndex = 0;
   let destroyed = false;
