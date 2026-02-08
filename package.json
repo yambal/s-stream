@@ -1,0 +1,12 @@
+{
+  "name": "ets2-radio",
+  "version": "1.0.0",
+  "description": "Simple MP3 loop streaming server for ETS2 internet radio",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
