@@ -9,17 +9,24 @@ const BITRATE = 128;
 const CHUNK_SIZE = 4096;
 const INTERVAL = Math.floor((CHUNK_SIZE / (BITRATE * 1000 / 8)) * 1000);
 
-const STREAM_HEADERS = {
-  'Content-Type': 'audio/mpeg',
-  'icy-name': 'ETS2 Radio',
-  'icy-genre': 'Various',
-  'icy-br': String(BITRATE),
-  'icy-pub': '1',
-  'Cache-Control': 'no-cache, no-store',
-  'Pragma': 'no-cache',
-  'Connection': 'keep-alive',
-  'Accept-Ranges': 'none',
-};
+const ICY_METAINT = 16000;
+
+function getStreamHeaders(req) {
+  const wantsMetadata = req && /icy-metadata:\s*1/i.test(req.headers['icy-metadata'] || '');
+  const headers = {
+    'Content-Type': 'audio/mpeg',
+    'icy-name': 'ETS2 Radio',
+    'icy-genre': 'Various',
+    'icy-br': String(BITRATE),
+    'icy-pub': '1',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+  };
+  if (wantsMetadata) {
+    headers['icy-metaint'] = String(ICY_METAINT);
+  }
+  return { headers, wantsMetadata };
+}
 
 http.createServer((req, res) => {
   if (req.url === '/') {
@@ -34,7 +41,8 @@ http.createServer((req, res) => {
 
   // HEAD リクエストにはヘッダーだけ返す
   if (req.method === 'HEAD') {
-    res.writeHead(200, STREAM_HEADERS);
+    const { headers } = getStreamHeaders(req);
+    res.writeHead(200, headers);
     return res.end();
   }
 
@@ -45,22 +53,34 @@ http.createServer((req, res) => {
     return res.end('No MP3 files found');
   }
 
-  console.log(`[${new Date().toISOString()}] Client connected: ${req.socket.remoteAddress}`);
+  const { headers, wantsMetadata } = getStreamHeaders(req);
+
+  console.log(`[${new Date().toISOString()}] Client connected: ${req.socket.remoteAddress} (metadata: ${wantsMetadata})`);
   console.log(`Playlist: ${files.length} tracks`);
 
-  res.writeHead(200, STREAM_HEADERS);
+  res.writeHead(200, headers);
 
   let trackIndex = 0;
   let destroyed = false;
   let fileBuffer = null;
   let bufferOffset = 0;
   let timer = null;
+  let bytesSinceMetadata = 0;
 
   function loadTrack() {
     const file = path.join(MP3_DIR, files[trackIndex % files.length]);
     console.log(`Now playing: ${files[trackIndex % files.length]}`);
     fileBuffer = fs.readFileSync(file);
     bufferOffset = 0;
+  }
+
+  function buildIcyMetadata(title) {
+    const text = `StreamTitle='${title}';`;
+    const len = Math.ceil(text.length / 16);
+    const buf = Buffer.alloc(1 + len * 16, 0);
+    buf[0] = len;
+    buf.write(text, 1);
+    return buf;
   }
 
   function sendChunk() {
@@ -71,17 +91,35 @@ http.createServer((req, res) => {
       loadTrack();
     }
 
-    const end = Math.min(bufferOffset + CHUNK_SIZE, fileBuffer.length);
-    const chunk = fileBuffer.slice(bufferOffset, end);
-    bufferOffset = end;
+    if (wantsMetadata) {
+      const remaining = ICY_METAINT - bytesSinceMetadata;
+      const sendSize = Math.min(remaining, CHUNK_SIZE, fileBuffer.length - bufferOffset);
+      const chunk = fileBuffer.slice(bufferOffset, bufferOffset + sendSize);
+      bufferOffset += sendSize;
+      bytesSinceMetadata += sendSize;
 
-    const ok = res.write(chunk);
-    if (!ok) {
-      res.once('drain', () => {
-        timer = setTimeout(sendChunk, INTERVAL);
-      });
-    } else {
+      res.write(chunk);
+
+      if (bytesSinceMetadata >= ICY_METAINT) {
+        const trackName = files[trackIndex % files.length].replace('.mp3', '');
+        res.write(buildIcyMetadata(trackName));
+        bytesSinceMetadata = 0;
+      }
+
       timer = setTimeout(sendChunk, INTERVAL);
+    } else {
+      const end = Math.min(bufferOffset + CHUNK_SIZE, fileBuffer.length);
+      const chunk = fileBuffer.slice(bufferOffset, end);
+      bufferOffset = end;
+
+      const ok = res.write(chunk);
+      if (!ok) {
+        res.once('drain', () => {
+          timer = setTimeout(sendChunk, INTERVAL);
+        });
+      } else {
+        timer = setTimeout(sendChunk, INTERVAL);
+      }
     }
   }
 
