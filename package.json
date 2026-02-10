@@ -1,10 +1,11 @@
 {
-  "name": "ets2-radio",
+  "name": "s-stream",
   "version": "1.0.0",
-  "description": "Simple MP3 loop streaming server for ETS2 internet radio",
+  "description": "Icecast-compatible streaming server with admin UI",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "build": "cd client && npm install && npm run build"
   },
   "engines": {
     "node": ">=18.0.0"
